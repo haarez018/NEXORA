@@ -1,0 +1,442 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+enum Role {
+  BUYER
+  SUPPLIER
+  ORG_ADMIN
+}
+enum Lifecycle {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  REVOKED
+}
+enum NegotiationStatus {
+  DRAFT
+  NEGOTIATING
+  AWAITING_ACCEPTANCE
+  ACCEPTED
+  FAILED
+  EXPIRED
+}
+enum AgreementStatus {
+  DRAFT
+  AWAITING_ACCEPTANCE
+  ACTIVE
+  FULFILLED
+  DISPUTED
+  CANCELLED
+}
+enum MilestoneStatus {
+  PENDING
+  EVIDENCE_SUBMITTED
+  ACCEPTED
+  REJECTED
+}
+enum EvidenceStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+}
+enum PaymentMode {
+  SIMULATED
+  SANDBOX
+}
+enum PaymentStatus {
+  CREATED
+  APPROVAL_PENDING
+  APPROVED
+  AUTHORIZED
+  CAPTURE_PENDING
+  RECONCILING
+  CAPTURED
+  FAILED
+  EXPIRED
+  VOIDED
+  CANCELLED
+}
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+enum SimulationStatus {
+  DRAFT
+  RUNNING
+  COMPLETED
+  FAILED
+}
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  emailVerified Boolean @default(false)
+  image String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions Session[]
+  accounts Account[]
+  memberships OrganizationMembership[]
+  demands BuyerDemand[]
+  suppliers Supplier[]
+  evidence Evidence[]
+  disputes Dispute[]
+  payments Payment[]
+  auditEvents AuditEvent[]
+}
+model Session {
+  id String @id
+  token String @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([userId, expiresAt])
+}
+model Account {
+  id String @id
+  accountId String
+  providerId String
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken String?
+  refreshToken String?
+  idToken String?
+  accessTokenExpiresAt DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope String?
+  password String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+model Verification {
+  id String @id
+  identifier String
+  value String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([identifier])
+}
+model RateLimit {
+  id String @id @default(cuid())
+  key String @unique
+  count Int
+  lastRequest BigInt
+}
+model Organization {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  isDemo Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships OrganizationMembership[]
+  demands BuyerDemand[]
+  suppliers Supplier[]
+  offers SupplierOffer[]
+  coalitions Coalition[]
+  coalitionMemberships CoalitionMembership[]
+  negotiations Negotiation[]
+  agreements Agreement[]
+  milestones Milestone[]
+  evidence Evidence[]
+  riskSignals RiskSignal[]
+  disputes Dispute[]
+  payments Payment[]
+  auditEvents AuditEvent[]
+  simulations Simulation[]
+}
+model OrganizationMembership {
+  id String @id @default(cuid())
+  organizationId String
+  userId String
+  role Role
+  status MembershipStatus @default(ACTIVE)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([organizationId, userId])
+  @@index([userId, status])
+  @@index([organizationId, role, status])
+}
+model BuyerDemand {
+  id String @id @default(cuid())
+  organizationId String
+  buyerId String
+  title String
+  specification Json
+  destination String
+  quantity Int
+  maxTotalMinor BigInt
+  currency String @db.Char(3)
+  deadline DateTime
+  status Lifecycle @default(DRAFT)
+  version Int @default(1)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  buyer User @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  memberships CoalitionMembership[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, organizationId])
+  @@index([organizationId, status, deadline])
+  @@index([buyerId, status])
+}
+model Supplier {
+  id String @id @default(cuid())
+  organizationId String
+  ownerId String
+  name String
+  category String
+  status Lifecycle @default(DRAFT)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  offers SupplierOffer[]
+  agreements Agreement[]
+  riskSignals RiskSignal[]
+  payments Payment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, organizationId])
+  @@unique([organizationId, ownerId])
+  @@index([organizationId, status])
+}
+model SupplierOffer {
+  id String @id @default(cuid())
+  organizationId String
+  supplierId String
+  title String
+  capacity Int
+  unitPriceMinor BigInt
+  currency String @db.Char(3)
+  expiresAt DateTime
+  status Lifecycle @default(DRAFT)
+  version Int @default(1)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [supplierId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, status, expiresAt])
+  @@index([supplierId])
+}
+model Coalition {
+  id String @id @default(cuid())
+  organizationId String
+  name String
+  currency String @db.Char(3)
+  status Lifecycle @default(DRAFT)
+  version Int @default(1)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  memberships CoalitionMembership[]
+  negotiations Negotiation[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+}
+model CoalitionMembership {
+  id String @id @default(cuid())
+  organizationId String
+  coalitionId String
+  demandId String
+  demandVersion Int
+  status MembershipStatus @default(INVITED)
+  consentedAt DateTime?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  coalition Coalition @relation(fields: [coalitionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  demand BuyerDemand @relation(fields: [demandId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([coalitionId, demandId])
+  @@index([organizationId, status])
+  @@index([demandId, status])
+}
+model Negotiation {
+  id String @id @default(cuid())
+  organizationId String
+  coalitionId String
+  status NegotiationStatus @default(DRAFT)
+  round Int @default(0)
+  maxRounds Int @default(5)
+  expiresAt DateTime
+  version Int @default(1)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  coalition Coalition @relation(fields: [coalitionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  agreements Agreement[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, organizationId])
+  @@index([organizationId, status, expiresAt])
+  @@index([coalitionId])
+}
+model Agreement {
+  id String @id @default(cuid())
+  organizationId String
+  supplierId String
+  negotiationId String?
+  title String
+  terms Json
+  termsHash String?
+  version Int @default(1)
+  status AgreementStatus @default(DRAFT)
+  currency String @db.Char(3)
+  totalMinor BigInt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [supplierId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  negotiation Negotiation? @relation(fields: [negotiationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  milestones Milestone[]
+  disputes Dispute[]
+  payments Payment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([supplierId])
+  @@index([negotiationId])
+}
+model Milestone {
+  id String @id @default(cuid())
+  organizationId String
+  agreementId String
+  title String
+  sequence Int
+  rubric Json
+  dueAt DateTime
+  status MilestoneStatus @default(PENDING)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  agreement Agreement @relation(fields: [agreementId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  evidence Evidence[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, organizationId])
+  @@unique([agreementId, sequence])
+  @@index([organizationId, status, dueAt])
+}
+model Evidence {
+  id String @id @default(cuid())
+  organizationId String
+  milestoneId String
+  submitterId String
+  objectKey String @unique
+  sha256 String @db.Char(64)
+  mimeType String
+  sizeBytes Int
+  status EvidenceStatus @default(SUBMITTED)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  milestone Milestone @relation(fields: [milestoneId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  submitter User @relation(fields: [submitterId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, status])
+  @@index([milestoneId])
+}
+model RiskSignal {
+  id String @id @default(cuid())
+  organizationId String
+  supplierId String
+  code String
+  severity Severity
+  explanation String
+  source String
+  observedAt DateTime
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [supplierId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([organizationId, severity, observedAt])
+  @@index([supplierId])
+}
+model Dispute {
+  id String @id @default(cuid())
+  organizationId String
+  agreementId String
+  openedById String
+  reason String
+  resolution String?
+  status DisputeStatus @default(OPEN)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  agreement Agreement @relation(fields: [agreementId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  openedBy User @relation(fields: [openedById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, status])
+  @@index([agreementId])
+}
+model Payment {
+  id String @id @default(cuid())
+  organizationId String
+  agreementId String
+  buyerId String
+  supplierId String
+  agreementVersion Int
+  amountMinor BigInt
+  currency String @db.Char(3)
+  mode PaymentMode @default(SIMULATED)
+  status PaymentStatus @default(CREATED)
+  providerOrderId String? @unique
+  providerAuthorizationId String? @unique
+  providerCaptureId String? @unique
+  version Int @default(1)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  agreement Agreement @relation(fields: [agreementId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  buyer User @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [supplierId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, mode, status])
+  @@index([buyerId, status])
+  @@index([agreementId])
+  @@index([supplierId])
+}
+model AuditEvent {
+  id String @id @default(cuid())
+  organizationId String
+  actorId String?
+  action String
+  targetType String
+  targetId String
+  requestId String
+  metadata Json
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  @@index([organizationId, createdAt])
+  @@index([targetType, targetId])
+  @@index([requestId])
+}
+model Simulation {
+  id String @id @default(cuid())
+  organizationId String
+  name String
+  scenarioVersion Int @default(1)
+  seed Int
+  status SimulationStatus @default(DRAFT)
+  configuration Json
+  results Json?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, status, createdAt])
+}
